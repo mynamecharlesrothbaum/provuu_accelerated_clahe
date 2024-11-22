@@ -18,11 +18,9 @@ void main() {
 
     //map the value to a histogram bin.
     uint bin = value * 255u / 65535u;
+    uint clipped_bin = clamp(bin, 0u, 256u);
 
-    histogram[bin] = 0u; //make sure index is empty for this work group
-    barrier();
-
-    atomicAdd(histogram[bin],1u);
+    atomicAdd(histogram[clipped_bin],1u);
     barrier();
 
     // compute cumulative distribution function values for every bin
