@@ -7,6 +7,8 @@ layout(binding = 0, r16) uniform image2D img;
 shared uint histogram[256];
 shared uint cdf[256];
 
+uniform uint clipLimit = 256u;
+
 void main() {
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
 
@@ -18,9 +20,25 @@ void main() {
 
     //map the value to a histogram bin.
     uint bin = value * 255u / 65535u;
-    uint clipped_bin = clamp(bin, 0u, 256u);
 
-    atomicAdd(histogram[clipped_bin],1u);
+    atomicAdd(histogram[bin],1u);
+    barrier();
+
+    // clip the histogram at the clipLimit, redistribute clipped excess
+    if(gl_LocalInvocationIndex == 0){
+        uint totalExcess = 0u;
+
+        for(int i = 0; i < 256; i++){
+            if(histogram[i] > clipLimit){
+                totalExcess += (histogram[i] - clipLimit);
+                histogram[i] = clipLimit;
+            }
+        }
+        uint excessPerBin = totalExcess / 256u;
+        for(uint i = 0; i < 256; i++){
+            histogram[i] += excessPerBin;
+        }
+    }
     barrier();
 
     // compute cumulative distribution function values for every bin
