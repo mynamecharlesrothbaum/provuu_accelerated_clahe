@@ -8,7 +8,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 
-compute_shader_file = open("shaders/compute_shader_clahe.glsl")
+compute_shader_file = open("shaders/compute_shader_clahe_sweep.glsl")
 compute_shader_src = compute_shader_file.read()
 
 # width and height of camera frames
@@ -123,7 +123,7 @@ def main():
     while not glfw.window_should_close(window):
         count += 1
 
-        if (count % 3 == 0):
+        if (count % 2 == 0):
             continue
 
         # Pull camera frame and update texture
@@ -141,7 +141,7 @@ def main():
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
         glUseProgram(compute_program)
-        glDispatchCompute(round(w/16), round(w/16), 1)
+        glDispatchCompute(round(w/39), round(h/39), 1)
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 

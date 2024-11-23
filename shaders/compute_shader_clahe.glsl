@@ -1,52 +1,45 @@
 #version 430
 
-layout(local_size_x = 16, local_size_y = 16) in;
+layout(local_size_x = 39, local_size_y = 39) in;
 
 layout(binding = 0, r16) uniform image2D img;
 
-shared uint histogram[256];
-shared uint cdf[256];
+const uint num_bins = 256;
 
-uniform uint clipLimit = 256u;
+shared uint histogram[num_bins];
+shared uint cdf[num_bins];
+
+uniform uint clipLimit = 01u;
 
 void main() {
-    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if(gl_LocalInvocationIndex < num_bins){
+        histogram[gl_LocalInvocationIndex] = 0u;
+        cdf[gl_LocalInvocationIndex] = 0u;
+    }
 
-    float pixel = imageLoad(img, pos).r;
-    float intensity = pixel.r;
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    float intensity = imageLoad(img, pos).r;
 
     //convert 16 bit [0, 1] float to a [0, 65535] int
     uint value = uint(intensity * 65535.0 + 0.5); //0.5 added for rounding
 
     //map the value to a histogram bin.
-    uint bin = value * 255u / 65535u;
+    uint bin = min(value * num_bins / 65535u, num_bins - 1u);
 
     atomicAdd(histogram[bin],1u);
+
     barrier();
 
-    // clip the histogram at the clipLimit, redistribute clipped excess
-    if(gl_LocalInvocationIndex == 0){
-        uint totalExcess = 0u;
-
-        for(int i = 0; i < 256; i++){
-            if(histogram[i] > clipLimit){
-                totalExcess += (histogram[i] - clipLimit);
-                histogram[i] = clipLimit;
-            }
-        }
-        uint excessPerBin = totalExcess / 256u;
-        for(uint i = 0; i < 256; i++){
-            histogram[i] += excessPerBin;
-        }
-    }
-    barrier();
 
     // compute cumulative distribution function values for every bin
     // make them accesible in cdf[bin]
     if(gl_LocalInvocationIndex == 0){
         uint sum = 0u;
 
-        for(uint i = 0u; i < 256u; i++){
+        for(uint i = 0u; i < num_bins; i++){
+            if(histogram[i] > clipLimit){
+                histogram[i] = clipLimit;
+            }
             sum += histogram[i];
             cdf[i] = sum;
         }
@@ -55,7 +48,7 @@ void main() {
 
     uint cdf_value = cdf[bin];
 
-    float equalized_intensity = (float(cdf_value) / float(cdf[255]));
+    float equalized_intensity = (float(cdf_value) / float(cdf[num_bins - 1]));
 
     imageStore(img, pos, vec4(equalized_intensity, 0.0, 0.0, 1.0));
 
