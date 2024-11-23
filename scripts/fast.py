@@ -8,11 +8,14 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 
-compute_shader_file = open("shaders/compute_shader_clahe.glsl")
+compute_shader_file = open("shaders/cs_clahe.glsl")
 compute_shader_src = compute_shader_file.read()
 
 # width and height of camera frames
 w, h = 1280, 720
+# Number of CLAHE tiles
+numTilesX = round(w/39)
+numTilesY = round(h/39)
 
 def start_camera_stream():
     # Start gstreamer pipeline to send frames to appsink
@@ -93,14 +96,11 @@ def main():
     if not glfw.init():
         print("Failed to initialize GLFW")
         sys.exit(1)
-
     window = glfw.create_window(w, h, "pipeline test", None, None)
-
     if not window:
         glfw.terminate()
         print("Failed to create GLFW window")
         sys.exit(1)
-
     # Set context for OpenGL
     glfw.make_context_current(window)
 
@@ -112,6 +112,15 @@ def main():
 
     sink = start_camera_stream()
     count = 1
+
+    histogramBuffer = glGenBuffers(1)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
+
+    histogramSizePerTile = 256
+    totalBufferSize = numTilesX * numTilesY * histogramSizePerTile * np.dtype(np.uint32).itemsize
+
+    bindingPoint = 1
+    glBufferData(GL_SHADER_STORAGE_BUFFER, bindingPoint, histogramBuffer)
 
 
     ### bind texture object at texture_id to the GL_TEXTURE_2D target. 
@@ -142,7 +151,8 @@ def main():
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
         glUseProgram(compute_program)
-        glDispatchCompute(round(w/39), round(h/39), 1)
+        glUniform1i(glGetUniformLocation(compute_program, "numTilesX"), numTilesX)
+        glDispatchCompute(numTilesX, numTilesY, 1)
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 

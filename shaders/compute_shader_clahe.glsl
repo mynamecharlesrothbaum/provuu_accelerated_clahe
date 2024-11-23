@@ -1,5 +1,7 @@
 #version 430
 
+precision mediump float;
+
 layout(local_size_x = 39, local_size_y = 39) in;
 
 layout(binding = 0, r16) uniform image2D img;
@@ -10,6 +12,9 @@ shared uint histogram[num_bins];
 shared uint cdf[num_bins];
 
 uniform uint clipLimit = 01u;
+
+uint low_bins;
+uint zero_bins;
 
 void main() {
     if(gl_LocalInvocationIndex < num_bins){
