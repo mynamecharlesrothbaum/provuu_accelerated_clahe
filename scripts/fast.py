@@ -119,6 +119,10 @@ def main():
     histogramSizePerTile = 256
     totalBufferSize = numTilesX * numTilesY * histogramSizePerTile * np.dtype(np.uint32).itemsize
 
+    assert totalBufferSize > 0
+    
+    glBufferData(GL_SHADER_STORAGE_BUFFER, totalBufferSize, None, GL_DYNAMIC_COPY)
+
     bindingPoint = 1
     glBufferData(GL_SHADER_STORAGE_BUFFER, bindingPoint, histogramBuffer)
 
@@ -149,7 +153,7 @@ def main():
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RED, GL_UNSIGNED_SHORT, info)
 
         ### Dispatch the compute_shader 
-        # will spawn a number of 16x16 work groups which run in parallel 
+        # will spawn a number of work groups which run in parallel 
         glUseProgram(compute_program)
         glUniform1i(glGetUniformLocation(compute_program, "numTilesX"), numTilesX)
         glDispatchCompute(numTilesX, numTilesY, 1)
