@@ -157,6 +157,7 @@ def main():
         if sample is None:
             continue
 
+
         buffer = sample.get_buffer()
         info = buffer.extract_dup(0, buffer.get_size())
 
@@ -165,8 +166,8 @@ def main():
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RED, GL_UNSIGNED_SHORT, info)
 
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
+        glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, None) # clean histogram buffer
 
-        buffer_size = glGetBufferParameteriv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE)
 
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
@@ -174,6 +175,18 @@ def main():
         glDispatchCompute(numTilesX, numTilesY, 1)
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+            
+        histodata = np.zeros(totalBufferSize, dtype=np.uint8)
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
+  
+        histodata = histodata.view(np.uint32)
+        histodata = histodata.reshape((numTilesX*numTilesY, 256))
+
+        tile_index_to_plot = 420
+        plt.bar(range(256), histodata[tile_index_to_plot])
+        plt.show()
+
 
         glUseProgram(second_pass_compute_program)
         glDispatchCompute(numTilesX, numTilesY, 1)
