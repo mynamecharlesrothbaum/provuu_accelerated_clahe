@@ -9,7 +9,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 import matplotlib.pyplot as plt
 
-compute_shader_file = open("shaders/cs_clahe.glsl")
+compute_shader_file = open("shaders/clahe_first_pass.glsl")
 compute_shader_src = compute_shader_file.read()
 
 # width and height of camera frames
@@ -177,7 +177,7 @@ def main():
         histodata = histodata.view(np.uint32)
         histodata = histodata.reshape((numTilesX*numTilesY, 256))
 
-        tile_index_to_plot = 3
+        tile_index_to_plot = 420
         tile_histogram = histodata[tile_index_to_plot]
 
         plt.bar(range(256), histodata[tile_index_to_plot])

@@ -9,11 +9,7 @@ layout(std430, binding = 1) buffer HistogramBuffer {
 };
 
 const uint num_bins = 256u;
-
-shared uint histogram[num_bins];
-shared uint cdf[num_bins];
-
-uniform uint clipLimit = 8u;
+uniform uint clipLimit = 10u;
 
 uint numTilesX = 33;
 
@@ -21,11 +17,6 @@ void main() {
     uint tileX = gl_WorkGroupID.x;
     uint tileY = gl_WorkGroupID.y;
     uint tileIndex = tileY * numTilesX + tileX;
-
-    if(gl_LocalInvocationIndex < num_bins){
-        histogram[gl_LocalInvocationIndex] = 0u;
-        cdf[gl_LocalInvocationIndex] = 0u;
-    }
 
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
     float intensity = imageLoad(img, pos).r; // [0.0 - 1.0]
@@ -36,6 +27,14 @@ void main() {
 
     atomicAdd(histograms[tileIndex * 256 + bin], 1u);
   
+    barrier();
+
+    if (gl_LocalInvocationIndex < num_bins){
+        uint num_bins_at_index = histograms[tileIndex * 256 + gl_LocalInvocationIndex];
+        if(num_bins_at_index > clipLimit){
+            histograms[tileIndex * 256 + gl_LocalInvocationIndex] = clipLimit;
+        }
+    }
     barrier();
 
     //imageStore(img, pos, vec4(scaled_intensity, 0.0, 0.0, 1.0));
