@@ -8,6 +8,7 @@ import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 from ctypes import c_void_p
+import time
 
 compute_shader_file = open("shaders/cs_clahe.glsl")
 compute_shader_src = compute_shader_file.read()
@@ -162,7 +163,6 @@ def main():
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
 
         buffer_size = glGetBufferParameteriv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE)
-        print(f"buffer size = {buffer_size}")
 
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
