@@ -8,7 +8,7 @@ layout(std430, binding = 1) buffer HistogramBuffer {
     uint histograms[];
 };
 
-const uint num_bins = 256;
+const uint num_bins = 256u;
 
 shared uint histogram[num_bins];
 shared uint cdf[num_bins];
@@ -30,17 +30,13 @@ void main() {
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
     float intensity = imageLoad(img, pos).r; // [0.0 - 1.0]
     float scaled_intensity = (intensity * 100); //because decimal values normalized 0-1024 get too small.
-    uint normal_intensity = uint(intensity * 65535.0); //this gets us back to 0-1024
+    uint uint_scaled_intensity = uint(intensity  * 65535.0); // range [0 - 1023]
 
-    uint bin = (normal_intensity * num_bins) / 1024u;
+    uint bin = (uint_scaled_intensity * num_bins) / 1024u;
 
-
-    if (gl_LocalInvocationIndex < 256){
-        histograms[gl_LocalInvocationIndex] = bin;
-    }   
-
+    atomicAdd(histograms[tileIndex * 256 + bin], 1u);
+  
     barrier();
 
-    imageStore(img, pos, vec4(scaled_intensity, 0.0, 0.0, 1.0));
-
+    //imageStore(img, pos, vec4(scaled_intensity, 0.0, 0.0, 1.0));
 }

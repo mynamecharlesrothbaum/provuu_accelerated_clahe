@@ -7,8 +7,7 @@ import sys
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
-from ctypes import c_void_p
-import time
+import matplotlib.pyplot as plt
 
 compute_shader_file = open("shaders/cs_clahe.glsl")
 compute_shader_src = compute_shader_file.read()
@@ -134,7 +133,7 @@ def main():
     num_tiles = numTilesX * numTilesY
     total_elements = num_tiles * num_bins
 
-    totalBufferSize = 256 * np.dtype(np.uint32).itemsize
+    totalBufferSize = 256 * num_tiles * np.dtype(np.uint32).itemsize
 
     assert totalBufferSize > 0
 
@@ -171,11 +170,21 @@ def main():
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 
-        histodata = np.ones(totalBufferSize, dtype=np.uint8)
+        histodata = np.zeros(totalBufferSize, dtype=np.uint8)
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
         glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
   
-        print(histodata.view(np.uint32))
+        histodata = histodata.view(np.uint32)
+        histodata = histodata.reshape((numTilesX*numTilesY, 256))
+
+        tile_index_to_plot = 3
+        tile_histogram = histodata[tile_index_to_plot]
+
+        plt.bar(range(256), histodata[tile_index_to_plot])
+        plt.show()
+
+        #histodata_no_z = [x for x in histodata.view(np.uint32) if x != 0]
+        #print(histodata_no_z)
 
 
         ### Render to screen
@@ -183,8 +192,7 @@ def main():
         glClear(GL_COLOR_BUFFER_BIT)
         glEnable(GL_TEXTURE_2D)
         #glBindTexture(GL_TEXTURE_2D, texture_id)
-        # enable fixed-function mapping for 2D texture
-        #glEnable(GL_TEXTURE_2D)
+
         #map pixels to a full screen quad.
         glBegin(GL_QUADS)
         glTexCoord2f(0.0, 1.0); glVertex2f(-1.0, -1.0)

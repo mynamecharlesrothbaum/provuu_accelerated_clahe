@@ -11,7 +11,7 @@ const uint num_bins = 256;
 shared uint histogram[num_bins];
 shared uint cdf[num_bins];
 
-uniform uint clipLimit = 01u;
+uniform uint clipLimit = 1u;
 
 uint low_bins;
 uint zero_bins;
@@ -26,7 +26,7 @@ void main() {
     float intensity = imageLoad(img, pos).r;
 
     //convert 16 bit [0, 1] float to a [0, 65535] int
-    uint value = uint(intensity * 65535.0 + 0.5); //0.5 added for rounding
+    uint value = uint(pow(intensity, 0.5) * 65535.0);
 
     //map the value to a histogram bin.
     uint bin = min(value * num_bins / 65535u, num_bins - 1u);
