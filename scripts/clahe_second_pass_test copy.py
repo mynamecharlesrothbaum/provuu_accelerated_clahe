@@ -9,8 +9,11 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 import matplotlib.pyplot as plt
 
-compute_shader_file = open("shaders/clahe_first_pass.glsl")
-compute_shader_src = compute_shader_file.read()
+first_pass_compute_shader = open("shaders/clahe_first_pass.glsl")
+first_pass_compute_shader_src = first_pass_compute_shader.read()
+
+second_pass_compute_shader = open("shaders/clahe_second_pass.glsl")
+second_pass_compute_shader_src = second_pass_compute_shader.read()
 
 # width and height of camera frames
 w, h = 1280, 720
@@ -56,7 +59,7 @@ def compile_shader(source, shader_type):
         raise RuntimeError(glGetShaderInfoLog(shader).decode())
     return shader
 
-def create_compute_program():
+def create_compute_program(compute_shader_src):
     #compile and link compute shader to program 
 
     compute_shader = compile_shader(compute_shader_src, GL_COMPUTE_SHADER)
@@ -109,7 +112,9 @@ def main():
     glfw.make_context_current(window)
 
     texture_id = create_texture(w,h)
-    compute_program = create_compute_program()
+
+    first_pass_compute_program = create_compute_program(first_pass_compute_shader_src)
+    second_pass_compute_program = create_compute_program(second_pass_compute_shader_src)
 
     # Set the viewport
     glViewport(0, 0, w, h)
@@ -165,10 +170,14 @@ def main():
 
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
-        glUseProgram(compute_program)
+        glUseProgram(first_pass_compute_program)
         glDispatchCompute(numTilesX, numTilesY, 1)
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+
+        glUseProgram(second_pass_compute_program)
+        glDispatchCompute(numTilesX, numTilesY, 1)
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
 
         histodata = np.zeros(totalBufferSize, dtype=np.uint8)
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)

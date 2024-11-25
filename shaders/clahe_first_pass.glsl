@@ -29,13 +29,6 @@ void main() {
   
     barrier();
 
-    if (gl_LocalInvocationIndex < num_bins){
-        uint num_bins_at_index = histograms[tileIndex * 256 + gl_LocalInvocationIndex];
-        if(num_bins_at_index > clipLimit){
-            histograms[tileIndex * 256 + gl_LocalInvocationIndex] = clipLimit;
-        }
-    }
-    barrier();
 
     //imageStore(img, pos, vec4(scaled_intensity, 0.0, 0.0, 1.0));
 }
