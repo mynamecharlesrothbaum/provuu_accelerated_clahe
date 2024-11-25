@@ -7,13 +7,13 @@ import sys
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
+from ctypes import c_void_p
 
 compute_shader_file = open("shaders/cs_clahe.glsl")
 compute_shader_src = compute_shader_file.read()
 
 # width and height of camera frames
 w, h = 1280, 720
-# Number of CLAHE tiles
 numTilesX = round(w/39)
 numTilesY = round(h/39)
 
@@ -96,11 +96,14 @@ def main():
     if not glfw.init():
         print("Failed to initialize GLFW")
         sys.exit(1)
+
     window = glfw.create_window(w, h, "pipeline test", None, None)
+
     if not window:
         glfw.terminate()
         print("Failed to create GLFW window")
         sys.exit(1)
+
     # Set context for OpenGL
     glfw.make_context_current(window)
 
@@ -113,19 +116,6 @@ def main():
     sink = start_camera_stream()
     count = 1
 
-    histogramBuffer = glGenBuffers(1)
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
-
-    histogramSizePerTile = 256
-    totalBufferSize = numTilesX * numTilesY * histogramSizePerTile * np.dtype(np.uint32).itemsize
-
-    assert totalBufferSize > 0
-    
-    glBufferData(GL_SHADER_STORAGE_BUFFER, totalBufferSize, None, GL_DYNAMIC_COPY)
-
-    bindingPoint = 1
-    glBufferData(GL_SHADER_STORAGE_BUFFER, bindingPoint, histogramBuffer)
-
 
     ### bind texture object at texture_id to the GL_TEXTURE_2D target. 
     # future operations on GL_TEXTURE_2D will affect this texture in memory.
@@ -133,6 +123,25 @@ def main():
     # GL_R16 -> 16 bit unsigned values stored in red channel.
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, w, h, 0, GL_RED, GL_UNSIGNED_SHORT, None) 
     glBindImageTexture(0, texture_id, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R16)
+
+    histogramBuffer = glGenBuffers(1)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
+
+    histogramSizePerTile = 256 * np.dtype(np.uint32).itemsize
+    totalBufferSize = numTilesX * numTilesY * histogramSizePerTile
+
+    assert totalBufferSize > 0
+
+    empty_data = np.zeros(totalBufferSize, dtype=np.uint8)
+
+    glBufferData(GL_SHADER_STORAGE_BUFFER, totalBufferSize, empty_data, GL_DYNAMIC_COPY)
+
+    error = glGetError()
+    if error != GL_NO_ERROR:
+        print(f"ERROR: {error}")
+
+    bindingPoint = 1
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, bindingPoint, histogramBuffer)
 
     while not glfw.window_should_close(window):
         count += 1
@@ -153,10 +162,9 @@ def main():
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RED, GL_UNSIGNED_SHORT, info)
 
         ### Dispatch the compute_shader 
-        # will spawn a number of work groups which run in parallel 
+        # will spawn a number of 16x16 work groups which run in parallel 
         glUseProgram(compute_program)
-        glUniform1i(glGetUniformLocation(compute_program, "numTilesX"), numTilesX)
-        glDispatchCompute(numTilesX, numTilesY, 1)
+        glDispatchCompute(round(w/39), round(h/39), 1)
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 
