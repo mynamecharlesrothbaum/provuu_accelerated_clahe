@@ -92,6 +92,7 @@ def create_texture(w,h):
 
 
 def main():
+    np.set_printoptions(threshold=sys.maxsize)
     #initialize GLFW
     if not glfw.init():
         print("Failed to initialize GLFW")
@@ -119,29 +120,26 @@ def main():
 
     ### bind texture object at texture_id to the GL_TEXTURE_2D target. 
     # future operations on GL_TEXTURE_2D will affect this texture in memory.
+    # Bind texture object
     glBindTexture(GL_TEXTURE_2D, texture_id)
-    # GL_R16 -> 16 bit unsigned values stored in red channel.
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, w, h, 0, GL_RED, GL_UNSIGNED_SHORT, None) 
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, w, h, 0, GL_RED, GL_UNSIGNED_SHORT, None)
     glBindImageTexture(0, texture_id, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R16)
 
+    # Create and allocate a shader storage buffer
     histogramBuffer = glGenBuffers(1)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
 
-    histogramSizePerTile = 256 * np.dtype(np.uint32).itemsize
-    totalBufferSize = numTilesX * numTilesY * histogramSizePerTile
+    num_bins = 256
+    num_tiles = numTilesX * numTilesY
+    total_elements = num_tiles * num_bins
+
+    totalBufferSize = 256 * np.dtype(np.uint32).itemsize
 
     assert totalBufferSize > 0
 
-    empty_data = np.zeros(totalBufferSize, dtype=np.uint8)
-
-    glBufferData(GL_SHADER_STORAGE_BUFFER, totalBufferSize, empty_data, GL_DYNAMIC_COPY)
-
-    error = glGetError()
-    if error != GL_NO_ERROR:
-        print(f"ERROR: {error}")
-
-    bindingPoint = 1
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, bindingPoint, histogramBuffer)
+    # Allocate buffer storage
+    glBufferData(GL_SHADER_STORAGE_BUFFER, totalBufferSize, None, GL_DYNAMIC_COPY)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
 
     while not glfw.window_should_close(window):
         count += 1
@@ -161,18 +159,32 @@ def main():
         glBindTexture(GL_TEXTURE_2D, texture_id)
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RED, GL_UNSIGNED_SHORT, info)
 
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
+
+        buffer_size = glGetBufferParameteriv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE)
+        print(f"buffer size = {buffer_size}")
+
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
         glUseProgram(compute_program)
-        glDispatchCompute(round(w/39), round(h/39), 1)
+        glDispatchCompute(numTilesX, numTilesY, 1)
         # ensure that all threads are done writing to the texture before it is rendered.
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+
+        histodata = np.ones(totalBufferSize, dtype=np.uint8)
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
+  
+        print(histodata.view(np.uint32))
+
 
         ### Render to screen
         # clear data leftover from last frame
         glClear(GL_COLOR_BUFFER_BIT)
-        # enable fixed-function mapping for 2D texture
         glEnable(GL_TEXTURE_2D)
+        #glBindTexture(GL_TEXTURE_2D, texture_id)
+        # enable fixed-function mapping for 2D texture
+        #glEnable(GL_TEXTURE_2D)
         #map pixels to a full screen quad.
         glBegin(GL_QUADS)
         glTexCoord2f(0.0, 1.0); glVertex2f(-1.0, -1.0)
