@@ -7,7 +7,7 @@ layout(std430, binding = 1) buffer HistogramBuffer {
 };
 
 const uint num_bins = 256u;
-uniform uint clipLimit = 10u;
+uniform uint clipLimit = 40u;
 shared uint excess_values;
 uint numTilesX = 33;
 uint numTilesY = 19;
@@ -35,10 +35,10 @@ void main() {
     atomicAdd(histograms[tileIndex * 256 + gl_LocalInvocationIndex], uint(excess_values / num_bins));
     barrier();
 
-    compute cdf
+    //compute cdf
     if (gl_LocalInvocationIndex == 0){
         uint sum = 0u;
-       for(uint i = 0u; i < num_bins; i++){
+        for(uint i = 0u; i < num_bins; i++){
             sum += histograms[tileIndex * 256 + i];
             histograms[tileIndex * 256 + i] = sum;
         }

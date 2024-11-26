@@ -15,6 +15,9 @@ first_pass_compute_shader_src = first_pass_compute_shader.read()
 second_pass_compute_shader = open("shaders/clahe_second_pass.glsl")
 second_pass_compute_shader_src = second_pass_compute_shader.read()
 
+third_pass_compute_shader = open("shaders/clahe_third_pass.glsl")
+third_pass_compute_shader_src = third_pass_compute_shader.read()
+
 # width and height of camera frames
 w, h = 1280, 720
 numTilesX = round(w/39)
@@ -115,6 +118,7 @@ def main():
 
     first_pass_compute_program = create_compute_program(first_pass_compute_shader_src)
     second_pass_compute_program = create_compute_program(second_pass_compute_shader_src)
+    third_pass_compute_program = create_compute_program(third_pass_compute_shader_src)
 
     # Set the viewport
     glViewport(0, 0, w, h)
@@ -176,36 +180,25 @@ def main():
         # ensure that all threads are done writing to the texture before it is rendered.
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
             
-        histodata = np.zeros(totalBufferSize, dtype=np.uint8)
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
-  
-        histodata = histodata.view(np.uint32)
-        histodata = histodata.reshape((numTilesX*numTilesY, 256))
-
-        tile_index_to_plot = 420
-        plt.bar(range(256), histodata[tile_index_to_plot])
-        plt.show()
-
-
         glUseProgram(second_pass_compute_program)
         glDispatchCompute(numTilesX, numTilesY, 1)
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
-
-        histodata = np.zeros(totalBufferSize, dtype=np.uint8)
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
   
-        histodata = histodata.view(np.uint32)
-        histodata = histodata.reshape((numTilesX*numTilesY, 256))
+        glUseProgram(third_pass_compute_program)
+        glDispatchCompute(numTilesX, numTilesY, 1)
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 
-        tile_index_to_plot = 420
-        plt.bar(range(256), histodata[tile_index_to_plot])
-        plt.show()
+        ### Use this block to bring histogram buffer into cpu memory
+        #histodata = np.zeros(totalBufferSize, dtype=np.uint8)
+        #glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
+        #glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
 
-        #histodata_no_z = [x for x in histodata.view(np.uint32) if x != 0]
-        #print(histodata_no_z)
-
+        ### use this block to plot histogram data after loading it into a numpy object
+        #histodata = histodata.view(np.uint32)
+        #histodata = histodata.reshape((numTilesX*numTilesY, 256))
+        #tile_index_to_plot = 0
+        #plt.bar(range(256), histodata[tile_index_to_plot])
+        #plt.show()
 
         ### Render to screen
         # clear data leftover from last frame
