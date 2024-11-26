@@ -34,7 +34,7 @@ def start_camera_stream():
     source.set_property('device', '/dev/video0')
     source.set_property('io-mode', 4)
 
-    caps = Gst.Caps.from_string(f'video/x-raw, width={w}, height={h}, format=GRAY16_LE')
+    caps = Gst.Caps.from_string(f'video/x-raw, width={w}, height={h}, format=GRAY16_LE, framerate=15/1')
     caps_filter = Gst.ElementFactory.make('capsfilter', 'caps_filter')
     caps_filter.set_property('caps', caps)
 
@@ -151,11 +151,6 @@ def main():
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
 
     while not glfw.window_should_close(window):
-        count += 1
-
-        if (count % 9 != 0):
-            continue
-
         # Pull camera frame and update texture
         sample = sink.emit('pull-sample')
         if sample is None:
@@ -192,7 +187,7 @@ def main():
         #histodata = np.zeros(totalBufferSize, dtype=np.uint8)
         #glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
         #glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
-
+#
         ### use this block to plot histogram data after loading it into a numpy object
         #histodata = histodata.view(np.uint32)
         #histodata = histodata.reshape((numTilesX*numTilesY, 256))

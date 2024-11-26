@@ -19,9 +19,8 @@ void main() {
     uint tileIndex = tileY * numTilesX + tileX;
 
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
-    float intensity = imageLoad(img, pos).r;
-    uint uint_scaled_intensity = uint(intensity  * 65535.0); // range [0 - 1023]
-    uint bin = (uint_scaled_intensity * num_bins) / 1024u;
+
+    uint bin = uint(imageLoad(img, pos).r * 256.0);
 
     float cdf_value = histograms[tileIndex * 256 + bin];
     float equalized_intensity = (cdf_value / float(histograms[tileIndex * num_bins + 255]));

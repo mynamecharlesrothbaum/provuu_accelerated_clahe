@@ -25,10 +25,12 @@ void main() {
 
     uint bin = (uint_scaled_intensity * num_bins) / 1024u;
 
+    float float_bin = float(bin) / 256.0;
+
     atomicAdd(histograms[tileIndex * 256 + bin], 1u);
   
     barrier();
 
 
-    //imageStore(img, pos, vec4(scaled_intensity, 0.0, 0.0, 1.0));
+    imageStore(img, pos, vec4(float_bin, 0.0, 0.0, 1.0));
 }
