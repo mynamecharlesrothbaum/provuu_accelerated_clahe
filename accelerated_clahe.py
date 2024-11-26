@@ -22,6 +22,7 @@ import OpenGL.GL as gl
 from OpenGL.GL import *
 import sys
 import gi
+import math
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 import matplotlib.pyplot as plt
@@ -45,8 +46,8 @@ output_w, output_h = 1920, 1080
 
 #number of tiles for CLAHE. 
 # 39x39 is the maximum openGL work group size the Nano can support.
-numTilesX = round(w/39)
-numTilesY = round(h/39)
+numTilesX = math.ceil(w/39)
+numTilesY = math.ceil(h/39)
 
 def start_camera_stream():
     # Start gstreamer pipeline to send frames to appsink
