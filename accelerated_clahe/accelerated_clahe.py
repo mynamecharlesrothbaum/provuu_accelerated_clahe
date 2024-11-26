@@ -1,3 +1,20 @@
+# accelerated_clahe.py
+# PROVUU
+#
+# Pipeline:
+# 1. Gstreamer sends camera image buffers to the appsink (CPU)
+# 2. App loads the CPU memory buffers from the appsink in to an openGL shared memory buffer.
+# 3. CLAHE image is computed from three passes of three different openGL Shader Language programs.
+#   1. clahe_first_pass.glsl computes the histograms of each image tile and 
+#      saves each histogram to shared memory
+#   2. clahe_second_pass.glsl applies clip limiting to each histogram and then saves the cdf
+#      function of each histogram to shared memory.
+#   3. clahe_third_pass.glsl computes the equalized intensities of each pixel, and writes
+#      them back to the original image buffer using bilinear interpolation to remove tile
+#      artifacts
+# 4. OpenGL builtin GL_LINEAR scaling is used to map the input image to a fullscreen image.
+# 5. Final image is rendered to screen. 
+
 import numpy as np
 import subprocess
 import glfw
@@ -9,22 +26,27 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst
 import matplotlib.pyplot as plt
 
-first_pass_compute_shader = open("shaders/clahe_first_pass.glsl")
+# source files for compute shaders
+first_pass_compute_shader = open("accelerated_clahe/shaders/clahe_first_pass.glsl")
 first_pass_compute_shader_src = first_pass_compute_shader.read()
 
-second_pass_compute_shader = open("shaders/clahe_second_pass.glsl")
+second_pass_compute_shader = open("accelerated_clahe/shaders/clahe_second_pass.glsl")
 second_pass_compute_shader_src = second_pass_compute_shader.read()
 
-third_pass_compute_shader = open("shaders/clahe_third_pass.glsl")
+third_pass_compute_shader = open("accelerated_clahe/shaders/clahe_third_pass.glsl")
 third_pass_compute_shader_src = third_pass_compute_shader.read()
 
 
-# width and height of camera frames
+# width and height of input frames
 w, h = 1280, 720
+
+# width and height out output frames
+output_w, output_h = 1920, 1080
+
+#number of tiles for CLAHE. 
+# 39x39 is the maximum openGL work group size the Nano can support.
 numTilesX = round(w/39)
 numTilesY = round(h/39)
-
-output_w, output_h = 1920, 1080
 
 def start_camera_stream():
     # Start gstreamer pipeline to send frames to appsink
@@ -79,8 +101,8 @@ def create_compute_program(compute_shader_src):
     glDeleteShader(compute_shader)
     return program
 
+#Create image buffer that will contain the input image until it is scaled to fullscreen. 
 def create_texture(w,h):
-    #parametrize texture that will contain image data in gpu memory
     texture_id = glGenTextures(1)
 
     glBindTexture(GL_TEXTURE_2D, texture_id)
@@ -89,8 +111,8 @@ def create_texture(w,h):
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
 
-    # have to copy red channel to empty green and blue channel so that the r16
-    # image renders as grayscale.
+    # have to tell red and blue channel to use red channel because all of
+    # the pixel values are written to the red channel
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_RED)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED)
@@ -99,6 +121,7 @@ def create_texture(w,h):
 
     return texture_id
 
+# create the image buffer that will contain the final scaled image to render to screen.
 def create_framebuffer(output_width, output_height):
     framebuffer_texture = glGenTextures(1)
     glBindTexture(GL_TEXTURE_2D, framebuffer_texture)
@@ -115,69 +138,61 @@ def create_framebuffer(output_width, output_height):
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED)
 
-    if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE:
-        print("Framebuffer is not complete")
-        sys.exit(1)
-
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
     return framebuffer, framebuffer_texture
 
 
 def main():
-    np.set_printoptions(threshold=sys.maxsize)
+    #np.set_printoptions(threshold=sys.maxsize) # for printing full data when debugging
+
     #initialize GLFW
     if not glfw.init():
         print("Failed to initialize GLFW")
         sys.exit(1)
 
     window = glfw.create_window(output_w, output_h, "pipeline test", None, None)
-
     if not window:
         glfw.terminate()
         print("Failed to create GLFW window")
         sys.exit(1)
 
-    # Set context for OpenGL
+    # Set context for OpenG
     glfw.make_context_current(window)
 
     texture_id = create_texture(w,h)
 
+    # compile glsl compute shader programs 
     first_pass_compute_program = create_compute_program(first_pass_compute_shader_src)
     second_pass_compute_program = create_compute_program(second_pass_compute_shader_src)
     third_pass_compute_program = create_compute_program(third_pass_compute_shader_src)
 
-    # Set the viewport
-    glViewport(0, 0, w, h)
-
+    # begin running gstreamer pipeline to send camera frame buffers to appsink.
     sink = start_camera_stream()
 
-    ### bind texture object at texture_id to the GL_TEXTURE_2D target. 
-    # future operations on GL_TEXTURE_2D will affect this texture in memory.
-    # Bind texture object
+    # bind texture object at texture_id to the GL_TEXTURE_2D target. 
+    # (future operations on GL_TEXTURE_2D will affect this texture in memory.)
     glBindTexture(GL_TEXTURE_2D, texture_id)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, w, h, 0, GL_RED, GL_UNSIGNED_SHORT, None)
     glBindImageTexture(0, texture_id, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R16)
 
+    # create the buffer that will contain the output image
     framebuffer, framebuffer_texture = create_framebuffer(output_w, output_h)
 
-    # Create and allocate a shader storage buffer
+    # Create and allocate a shader storage buffer to persistently store histograms
+    # and cdf functions for each tile of frame.
     histogramBuffer = glGenBuffers(1)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
 
-    num_bins = 256
-    num_tiles = numTilesX * numTilesY
-    total_elements = num_tiles * num_bins
+    # calculate total buffer size
+    numBins = 256
+    numTiles = numTilesX * numTilesY
+    totalBufferSize = numBins * numTiles * np.dtype(np.uint32).itemsize
 
-    totalBufferSize = 256 * num_tiles * np.dtype(np.uint32).itemsize
-
-    assert totalBufferSize > 0
-
-    # Allocate buffer storage
+    # Allocate memory for histograms buffer
     glBufferData(GL_SHADER_STORAGE_BUFFER, totalBufferSize, None, GL_DYNAMIC_COPY)
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
 
     while not glfw.window_should_close(window):
-        # Pull camera frame and update texture
+        # recieve input image buffer from appsink
         sample = sink.emit('pull-sample')
         if sample is None:
             continue
@@ -185,33 +200,40 @@ def main():
         buffer = sample.get_buffer()
         info = buffer.extract_dup(0, buffer.get_size())
 
-        # Update texture with new data
+        # Update image buffer with new data
         glBindTexture(GL_TEXTURE_2D, texture_id)
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RED, GL_UNSIGNED_SHORT, info)
 
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
-        glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, None) # clean histogram buffer
+        # clean histograms buffer for each new input frame.
+        glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, None)
 
-        ### Dispatch the compute_shader 
-        # will spawn a number of 16x16 work groups which run in parallel 
+        # Dispatch the compute_shaders:
+        # First pass: compute histograms for each tile. 
+        # (each dispatch deploys a workgroup of 1521 threads to process each image tile)
         glUseProgram(first_pass_compute_program)
         glDispatchCompute(numTilesX, numTilesY, 1)
-        # ensure that all threads are done writing to the texture before it is rendered.
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
-            
+        # ensure that all threads are done writing to the buffer before moving on.
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
+        
+        # Second pass: apply clip limiting and compute cdf on each histogram.
+        # (each dispatch deploys a workgroup of 256 threads to process each tile's histogram).
         glUseProgram(second_pass_compute_program)
         glDispatchCompute(numTilesX, numTilesY, 1)
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
   
+        # Third pass: compute equalized and interpolated pixel values, and write them back 
+        # to the image buffer.
+        # (each dispatch deploys a workgroup of 1521 threads to process each image tile)
         glUseProgram(third_pass_compute_program)
         glDispatchCompute(numTilesX, numTilesY, 1)
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
 
-        ### Use this block to bring histogram buffer into cpu memory
+        ### Use this block to bring histogram buffer into cpu memory as a numpy object
         #histodata = np.zeros(totalBufferSize, dtype=np.uint8)
         #glBindBuffer(GL_SHADER_STORAGE_BUFFER, histogramBuffer)
         #glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, histodata.nbytes, histodata)
-#
+
         ### use this block to plot histogram data after loading it into a numpy object
         #histodata = histodata.view(np.uint32)
         #histodata = histodata.reshape((numTilesX*numTilesY, 256))
