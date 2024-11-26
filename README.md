@@ -1,6 +1,44 @@
 # README - provuu_accelerated_clahe
 
-### project directory
-The [accelerated_clahe directory]([https://www.datacamp.com](https://github.com/mynamecharlesrothbaum/provuu_accelerated_clahe/tree/main/accelerated_clahe)) 
-contains the main program:  [accelerated_clahe.py], and the [shaders directory].
-The `shaders` directory contains openGL Shader Language compute programs which perform GPU accelerated steps to apply CLAHE to each video frame. 
+**Pipeline description:**
+1. GStreamer pipeline
+    * Receive 1200x720 GRAY16_LE frame from camera.
+    * Send frame buffers to application memory through `appsink`.
+2. App loads CPU memory buffers from `appsink` into an openGL image buffer in shared memory.
+3. CLAHE image is computed from three passes of openGL compute shaders:
+    * First pass: `clahe_first_pass.glsl` computes the histogram of each image tile and saves the histogram to the corresponding index of a storage buffer in shared memory.
+    * Second pass: `clahe_second_pass.glsl` applies clip limiting to the histogram of each file, and then computes the cumulative distribution functions (CDF) of each histogram, writing the CDFs back to the storage buffer.
+    * Third pass: `clahe_third_pass.glsl` computes the equalized intensity for each pixel using the CDFs and bilinear interpolation to remove visible borders between tiles. 
+4. OpenGL builtin GL_LINEAR bilinear scaling maps the processed image to the full screen dimensions.
+5. Final image is rendered to the screen.
+
+### Instructions
+
+1. Clone the repository:
+```bash
+git clone https://github.com/mynamecharlesrothbaum/provuu_accelerated_clahe.git
+```
+
+2. Run the accelerated CLAHE pipeline:
+
+```bash
+python3 accelerated_clahe.py
+```
+
+3. The processed CLAHE video will render in a GLFW window.
+
+### project structure
+
+```bash
+provuu_accelerated_clahe/
+├── accelerated_clahe.py        # Main application
+├── shaders/                    # Directory for GLSL shaders
+│   ├── clahe_first_pass.glsl   # First pass: Histogram calculation
+│   ├── clahe_second_pass.glsl  # Second pass: Contrast Limiting and CDF computation
+│   └── clahe_third_pass.glsl   # Third pass: Apply CLAHE and bilinear interpolation
+├── test_scripts                # Old test applications
+└── README.md
+```
+
+
+
