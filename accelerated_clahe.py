@@ -27,13 +27,13 @@ from gi.repository import Gst
 import matplotlib.pyplot as plt
 
 # source files for compute shaders
-first_pass_compute_shader = open("accelerated_clahe/shaders/clahe_first_pass.glsl")
+first_pass_compute_shader = open("shaders/clahe_first_pass.glsl")
 first_pass_compute_shader_src = first_pass_compute_shader.read()
 
-second_pass_compute_shader = open("accelerated_clahe/shaders/clahe_second_pass.glsl")
+second_pass_compute_shader = open("shaders/clahe_second_pass.glsl")
 second_pass_compute_shader_src = second_pass_compute_shader.read()
 
-third_pass_compute_shader = open("accelerated_clahe/shaders/clahe_third_pass.glsl")
+third_pass_compute_shader = open("shaders/clahe_third_pass.glsl")
 third_pass_compute_shader_src = third_pass_compute_shader.read()
 
 
