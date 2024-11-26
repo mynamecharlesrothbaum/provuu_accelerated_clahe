@@ -25,9 +25,7 @@ void main() {
     float cdf_value = histograms[tileIndex * 256 + bin];
     float equalized_intensity = (cdf_value / float(histograms[tileIndex * num_bins + 255]));
 
-    //if(gl_LocalInvocationIndex < 256){
-    //    histograms[gl_LocalInvocationIndex] = histograms[255];
-    //}
+    
 
 
     imageStore(img, pos, vec4(equalized_intensity, 0.0, 0.0, 1.0));

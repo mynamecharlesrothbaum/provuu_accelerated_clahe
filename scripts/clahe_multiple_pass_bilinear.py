@@ -18,10 +18,13 @@ second_pass_compute_shader_src = second_pass_compute_shader.read()
 third_pass_compute_shader = open("shaders/clahe_third_pass.glsl")
 third_pass_compute_shader_src = third_pass_compute_shader.read()
 
+
 # width and height of camera frames
 w, h = 1280, 720
 numTilesX = round(w/39)
 numTilesY = round(h/39)
+
+output_w, output_h = 1920, 1080
 
 def start_camera_stream():
     # Start gstreamer pipeline to send frames to appsink
@@ -96,6 +99,29 @@ def create_texture(w,h):
 
     return texture_id
 
+def create_framebuffer(output_width, output_height):
+    framebuffer_texture = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, framebuffer_texture)
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, output_width, output_height, 0, GL_RED, GL_UNSIGNED_SHORT, None)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+
+    framebuffer = glGenFramebuffers(1)
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer)
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebuffer_texture, 0)
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_RED)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED)
+
+    if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE:
+        print("Framebuffer is not complete")
+        sys.exit(1)
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+    return framebuffer, framebuffer_texture
+
 
 def main():
     np.set_printoptions(threshold=sys.maxsize)
@@ -104,7 +130,7 @@ def main():
         print("Failed to initialize GLFW")
         sys.exit(1)
 
-    window = glfw.create_window(w, h, "pipeline test", None, None)
+    window = glfw.create_window(output_w, output_h, "pipeline test", None, None)
 
     if not window:
         glfw.terminate()
@@ -124,8 +150,6 @@ def main():
     glViewport(0, 0, w, h)
 
     sink = start_camera_stream()
-    count = 1
-
 
     ### bind texture object at texture_id to the GL_TEXTURE_2D target. 
     # future operations on GL_TEXTURE_2D will affect this texture in memory.
@@ -133,6 +157,8 @@ def main():
     glBindTexture(GL_TEXTURE_2D, texture_id)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, w, h, 0, GL_RED, GL_UNSIGNED_SHORT, None)
     glBindImageTexture(0, texture_id, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R16)
+
+    framebuffer, framebuffer_texture = create_framebuffer(output_w, output_h)
 
     # Create and allocate a shader storage buffer
     histogramBuffer = glGenBuffers(1)
@@ -156,7 +182,6 @@ def main():
         if sample is None:
             continue
 
-
         buffer = sample.get_buffer()
         info = buffer.extract_dup(0, buffer.get_size())
 
@@ -166,7 +191,6 @@ def main():
 
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, histogramBuffer)
         glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, None) # clean histogram buffer
-
 
         ### Dispatch the compute_shader 
         # will spawn a number of 16x16 work groups which run in parallel 
@@ -195,19 +219,43 @@ def main():
         #plt.bar(range(256), histodata[tile_index_to_plot])
         #plt.show()
 
-        ### Render to screen
-        # clear data leftover from last frame
-        glClear(GL_COLOR_BUFFER_BIT)
-        glEnable(GL_TEXTURE_2D)
-        #glBindTexture(GL_TEXTURE_2D, texture_id)
+        # Bind the framebuffer for rendering the scaled image
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer)
+        glViewport(0, 0, output_w, output_h)  # Match the target 1080p resolution
 
-        #map pixels to a full screen quad.
+        # Clear previous framebuffer content
+        glClear(GL_COLOR_BUFFER_BIT)
+
+        # Enable texturing and bind the source texture
+        glEnable(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, texture_id)
+
+        # Render the source texture onto a fullscreen quad
         glBegin(GL_QUADS)
         glTexCoord2f(0.0, 1.0); glVertex2f(-1.0, -1.0)
         glTexCoord2f(1.0, 1.0); glVertex2f(1.0, -1.0)
         glTexCoord2f(1.0, 0.0); glVertex2f(1.0, 1.0)
         glTexCoord2f(0.0, 0.0); glVertex2f(-1.0, 1.0)
         glEnd()
+
+        # reset the framebuffer for screen rendering
+        glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+        # Clear the window content
+        glClear(GL_COLOR_BUFFER_BIT)
+
+        # Bind the scaled framebuffer texture
+        glBindTexture(GL_TEXTURE_2D, framebuffer_texture)
+
+        # render the scaled texture onto the screen
+        # for some reason i have to horizontally and vertically flip the texture
+        glBegin(GL_QUADS)
+        glTexCoord2f(-1.0, -1.0); glVertex2f(-1.0, -1.0)
+        glTexCoord2f(0.0, -1.0); glVertex2f(1.0, -1.0)
+        glTexCoord2f(0.0, 0.0); glVertex2f(1.0, 1.0)
+        glTexCoord2f(-1.0, 0.0); glVertex2f(-1.0, 1.0)
+        glEnd()
+
 
         # render current buffer to the screen
         glfw.swap_buffers(window)
