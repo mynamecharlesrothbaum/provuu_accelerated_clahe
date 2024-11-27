@@ -24,21 +24,3 @@ git clone https://github.com/mynamecharlesrothbaum/provuu_accelerated_clahe.git
 ```bash
 python3 accelerated_clahe.py
 ```
-
-3. The processed CLAHE video will render in a GLFW window.
-
-### project structure
-
-```bash
-provuu_accelerated_clahe/
-├── accelerated_clahe.py        # Main application
-├── shaders/                    # Directory for GLSL shaders
-│   ├── clahe_first_pass.glsl   # First pass: Histogram calculation
-│   ├── clahe_second_pass.glsl  # Second pass: Contrast Limiting and CDF computation
-│   └── clahe_third_pass.glsl   # Third pass: Apply CLAHE and bilinear interpolation
-├── test_scripts                # Old test applications
-└── README.md
-```
-
-
-
