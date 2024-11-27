@@ -60,7 +60,7 @@ def start_camera_stream():
     source.set_property('device', '/dev/video0')
     source.set_property('io-mode', 4)
 
-    caps = Gst.Caps.from_string(f'video/x-raw, width={w}, height={h}, format=GRAY16_LE, framerate=30/1')
+    caps = Gst.Caps.from_string(f'video/x-raw, width={w}, height={h}, format=GRAY16_LE')
     caps_filter = Gst.ElementFactory.make('capsfilter', 'caps_filter')
     caps_filter.set_property('caps', caps)
 
