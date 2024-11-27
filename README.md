@@ -1,4 +1,4 @@
-# README - provuu_accelerated_clahe
+# provuu_accelerated_clahe
 
 **Pipeline description:**
 1. GStreamer pipeline
