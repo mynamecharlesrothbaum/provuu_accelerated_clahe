@@ -18,6 +18,9 @@
 ```bash
 git clone https://github.com/mynamecharlesrothbaum/provuu_accelerated_clahe.git
 ```
+```bash
+cd provuu_accelerated_clahe
+```
 
 2. Run the accelerated CLAHE pipeline:
 
