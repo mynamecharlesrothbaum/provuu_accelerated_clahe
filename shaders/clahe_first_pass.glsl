@@ -11,9 +11,6 @@ of each pixel in a 39x39 tile and compute the histogram of the tile.
 Each work group saves the histogram to the corresponding index in the shared 
 histograms buffer, and also saves the computed bin for each pixel in the shared
 image buffer.
-
-Note: gstreamer is sending image data to the appsink as 10-bit grayscale, 
-but in 16-bit format. So the pixel intensity * 2^16 = range[0,1024].
 */
 
 #version 430
